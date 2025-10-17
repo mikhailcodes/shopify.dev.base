@@ -1,0 +1,64 @@
+# Node.js dependencies
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Vite
+dist/
+dist-ssr/
+*.local
+.vite/
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+.idea/
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# OS files
+Thumbs.db
+.DS_Store
+*~
+.Spotlight-V100
+.Trashes
+
+# Shopify theme files
+config/settings_data.json
+shopify.theme.toml
+
+# Vite development files (auto-generated, contains localhost URLs during dev)
+snippets/vite-tag.liquid
+
+# Build artifacts
+*.log
+*.tsbuildinfo
+
+# Code coverage
+coverage
+*.lcov
+
+# Caches
+.eslintcache
+.cache
+
+# Lock files (keep only Bun)
+package-lock.json
+yarn.lock
+pnpm-lock.yaml

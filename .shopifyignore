@@ -1,0 +1,50 @@
+# Shopify Ignore - Files to exclude from theme uploads
+
+# Node modules
+node_modules/
+
+# Source files (Vite will build these)
+frontend/
+
+# Config files
+vite.config.js
+postcss.config.js
+tailwind.config.js
+package.json
+bun.lockb
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+
+# Build configs
+.vite/
+tsconfig.json
+.eslintrc*
+.prettierrc*
+
+# Git files
+.git/
+.gitignore
+.gitattributes
+
+# CI/CD
+.github/
+
+# Documentation
+README.md
+CLAUDE.md
+project_setup.md
+*.md
+
+# Environment files
+.env*
+
+# Editor directories
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
