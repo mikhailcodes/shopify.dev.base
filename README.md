@@ -751,27 +751,30 @@ build: {
 
 ### 3. Image Optimization
 
-Use Vite plugins for image optimization:
+**Important**: Do NOT use Vite plugins for image optimization in Shopify themes. Shopify has built-in image optimization via the `image_url` filter with automatic CDN delivery, resizing, and format conversion.
 
-```bash
-bun add -d vite-plugin-image-optimizer
+Use Shopify's native image optimization in Liquid templates:
+
+```liquid
+{%- comment -%} Shopify's built-in image optimization {%- endcomment -%}
+<img
+  srcset="{{ product.featured_image | image_url: width: 375 }} 375w,
+          {{ product.featured_image | image_url: width: 750 }} 750w,
+          {{ product.featured_image | image_url: width: 1100 }} 1100w"
+  sizes="(min-width: 750px) 50vw, 100vw"
+  src="{{ product.featured_image | image_url: width: 750 }}"
+  alt="{{ product.featured_image.alt | escape }}"
+  loading="lazy"
+  width="{{ product.featured_image.width }}"
+  height="{{ product.featured_image.height }}"
+>
 ```
 
-```javascript
-// vite.config.js
-import { ViteImageOptimizer } from 'vite-plugin-image-optimizer';
-
-export default defineConfig({
-  plugins: [
-    shopify({ /* ... */ }),
-    ViteImageOptimizer({
-      png: { quality: 80 },
-      jpeg: { quality: 80 },
-      webp: { quality: 80 },
-    }),
-  ],
-});
-```
+**Benefits of Shopify's image optimization**:
+- Automatic WebP/AVIF format conversion
+- Global CDN delivery
+- On-demand resizing
+- No build-time processing needed
 
 ### 4. Web Vitals Monitoring
 
@@ -885,6 +888,106 @@ resolve: {
 2. Verify Vite dev server is running on http://localhost:5173
 3. Clear browser cache (Cmd+Shift+R / Ctrl+Shift+F5)
 4. Check browser console for CORS errors
+
+#### Issue: CORS errors and assets failing to load in Shopify Theme Editor
+
+**Problem**: Vite dev server assets fail to load in Shopify theme editor due to CORS errors and mixed content blocking (HTTPS → HTTP).
+
+**Root Cause**:
+- Shopify theme editor runs on HTTPS
+- Local Vite dev server runs on HTTP (localhost:5173)
+- Browsers block mixed content (HTTPS page loading HTTP resources)
+- Vite 6.0.9+ has a bug where `allowedHosts: 'all'` doesn't work properly
+
+**Solution: Use Cloudflare Tunnel**
+
+This is the most reliable approach for theme editor development:
+
+1. **Install cloudflared** (one-time setup):
+   ```bash
+   brew install cloudflared
+   ```
+
+2. **Enable tunnel in vite.config.js**:
+   ```javascript
+   // vite.config.js
+   import shopify from 'vite-plugin-shopify';
+
+   export default defineConfig({
+     plugins: [
+       shopify({
+         themeRoot: './',
+         sourceCodeDir: 'frontend',
+         entrypointsDir: 'frontend/entrypoints',
+         tunnel: true, // Enable Cloudflare tunnel
+       }),
+     ],
+     server: {
+       allowedHosts: 'all', // Allow tunnel requests
+       headers: {
+         "Access-Control-Allow-Origin": "*",
+         "Access-Control-Allow-Methods": "GET, HEAD, PUT, POST, PATCH, DELETE",
+         "Access-Control-Allow-Headers": "Content-Type, Authorization",
+         "Access-Control-Allow-Credentials": "true"
+       },
+       cors: {
+         origin: "*",
+         credentials: true
+       }
+     }
+   });
+   ```
+
+3. **Important: Downgrade Vite to 6.0.8** (critical for tunnel support):
+   ```bash
+   bun add -d vite@6.0.8
+   ```
+
+   **Why?** Vite versions 6.0.9+ and 7.x have a bug where `allowedHosts: 'all'` doesn't work, causing the tunnel to return "Invalid Host header" errors. Version 6.0.8 is the last stable version for tunnel-based development.
+
+4. **Restart dev server**:
+   ```bash
+   bun run dev
+   ```
+
+**How it works**:
+- `vite-plugin-shopify` automatically starts a Cloudflare tunnel when `tunnel: true`
+- Creates a public HTTPS URL (e.g., `https://random-name.trycloudflare.com`)
+- Routes requests through tunnel → your local Vite server
+- Shopify theme editor loads assets via HTTPS tunnel URL
+- No mixed content errors, no CORS issues
+
+**Alternative: HTTPS with mkcert (without tunnel)**
+
+If you prefer not to use tunneling:
+
+1. Install mkcert and create local certificates:
+   ```bash
+   brew install mkcert
+   mkcert -install
+   mkcert localhost
+   ```
+
+2. Configure Vite for HTTPS:
+   ```javascript
+   // vite.config.js
+   import { readFileSync } from 'fs';
+
+   export default defineConfig({
+     server: {
+       https: {
+         key: readFileSync('./localhost-key.pem'),
+         cert: readFileSync('./localhost.pem'),
+       },
+       cors: {
+         origin: "*",
+         credentials: true
+       }
+     }
+   });
+   ```
+
+**Note**: The tunnel approach is simpler and more reliable for most use cases.
 
 #### Issue: Build fails in GitHub Actions
 

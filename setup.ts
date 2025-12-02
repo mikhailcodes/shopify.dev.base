@@ -79,6 +79,9 @@ interface SetupConfig {
   packageManager: "bun" | "npm" | "pnpm" | "yarn";
   shopifyEnvironment: string;
   themeId: string | null;
+  enableTunnel?: boolean;
+  projectType?: string;
+  projectDescription?: string;
 }
 
 async function getShopifyThemes(): Promise<Array<{ id: string; name: string; role: string }>> {
@@ -96,73 +99,155 @@ async function askQuestions(): Promise<SetupConfig> {
   header("Shopify Theme Development Environment Setup");
 
   log("Welcome! This script will help you set up a modern Shopify theme development environment.", colors.green);
-  log("Please answer the following questions:\n", colors.green);
+  log("This setup includes Vite for fast development, Bun for package management, and CI/CD workflows.\n", colors.green);
 
   // Question 1: Project Name
-  const projectName = await prompt("What is your project/store name? (e.g., 'my-store'):");
+  log("Let's start with some basic information about your project.\n", colors.cyan);
+  const projectName = await prompt("📦 What is your project/store name? (e.g., 'acme-store', 'my-boutique'):");
+
+  if (!projectName || projectName.trim() === "") {
+    log("⚠️  Project name is required. Please try again.", colors.red);
+    process.exit(1);
+  }
 
   // Question 2: Styling Approach
+  log("\n" + "─".repeat(60), colors.bright);
+  log("🎨 CSS Setup", colors.bright + colors.cyan);
+  log("─".repeat(60), colors.bright);
+  log("Choose your styling approach. We recommend plain CSS with CSS variables for most Shopify themes.", colors.yellow);
+  log("Note: This template enforces semantic class names (NO Tailwind-style utility classes).\n", colors.yellow);
+
   const stylingChoice = await select(
-    "\nWhich styling approach will you use?",
+    "Which styling approach will you use?",
     [
-      "Plain CSS (Recommended for simplicity)",
-      "SCSS/SASS (If you need variables, mixins, nesting)",
-      "PostCSS with plugins (For advanced processing)",
-      "Tailwind CSS (Utility-first approach)"
+      "Plain CSS (Recommended - simple, semantic, mobile-first)",
+      "SCSS/SASS (For variables, mixins, and nesting)",
+      "PostCSS with plugins (For advanced CSS processing)",
+      "Tailwind CSS (Utility-first - requires custom configuration)"
     ]
   );
   const stylingMap: SetupConfig["stylingApproach"][] = ["css", "scss", "postcss", "tailwind"];
   const stylingApproach = stylingMap[stylingChoice];
 
+  if (stylingApproach === "tailwind") {
+    log("\n⚠️  Note: While Tailwind is supported, this template's guidelines emphasize semantic class names.", colors.yellow);
+    log("You'll need to adapt the CLAUDE.md guidelines if you choose to use utility classes.\n", colors.yellow);
+  }
+
   // Question 3: JavaScript Approach
+  log("\n" + "─".repeat(60), colors.bright);
+  log("⚙️  JavaScript Setup", colors.bright + colors.cyan);
+  log("─".repeat(60), colors.bright);
+  log("Choose between vanilla JavaScript or TypeScript. Vanilla JS is simpler for most Shopify themes.\n", colors.yellow);
+
   const jsChoice = await select(
-    "\nWhich JavaScript approach will you use?",
+    "Which JavaScript approach will you use?",
     [
-      "Vanilla JavaScript (Recommended for Shopify themes)",
-      "TypeScript (For type safety and larger projects)"
+      "Vanilla JavaScript (Recommended - simple, fast, perfect for Shopify)",
+      "TypeScript (For type safety, better IDE support, and larger projects)"
     ]
   );
   const jsApproach: SetupConfig["jsApproach"] = jsChoice === 0 ? "vanilla" : "typescript";
 
   // Question 4: Package Manager
+  log("\n" + "─".repeat(60), colors.bright);
+  log("📦 Package Manager", colors.bright + colors.cyan);
+  log("─".repeat(60), colors.bright);
+  log("We strongly recommend Bun - it's 3-10x faster than npm/yarn and has built-in TypeScript support.\n", colors.yellow);
+
   const pmChoice = await select(
-    "\nWhich package manager will you use?",
+    "Which package manager will you use?",
     [
-      "Bun (Recommended - fast, modern)",
-      "npm (Standard, widely supported)",
-      "pnpm (Efficient disk usage)",
-      "yarn (Stable alternative)"
+      "Bun (Recommended - 3-10x faster, modern, built-in TypeScript)",
+      "npm (Standard Node.js package manager)",
+      "pnpm (Efficient disk usage with hard links)",
+      "yarn (Reliable alternative to npm)"
     ]
   );
   const pmMap: SetupConfig["packageManager"][] = ["bun", "npm", "pnpm", "yarn"];
   const packageManager = pmMap[pmChoice];
 
-  // Question 5: Shopify Environment
-  log("\nFetching available Shopify themes...", colors.cyan);
+  // Question 5: Theme Editor Development Setup
+  log("\n" + "─".repeat(60), colors.bright);
+  log("🔧 Development Environment", colors.bright + colors.cyan);
+  log("─".repeat(60), colors.bright);
+  log("For Shopify theme editor development, we recommend using Cloudflare tunnel to avoid CORS issues.", colors.yellow);
+  log("This requires cloudflared to be installed (brew install cloudflared).\n", colors.yellow);
+
+  const tunnelChoice = await select(
+    "Do you want to enable Cloudflare tunnel for theme editor development?",
+    [
+      "Yes (Recommended - enables HTTPS tunnel for theme editor)",
+      "No (I'll configure HTTPS with mkcert or work without theme editor)"
+    ]
+  );
+  const enableTunnel = tunnelChoice === 0;
+
+  if (enableTunnel) {
+    log("\n✓ Cloudflare tunnel will be enabled in vite.config.js", colors.green);
+    log("✓ Vite will be locked to version 6.0.8 (required for tunnel support)", colors.green);
+    log("Make sure to install cloudflared: brew install cloudflared\n", colors.yellow);
+  }
+
+  // Question 6: Shopify Store Connection
+  log("\n" + "─".repeat(60), colors.bright);
+  log("🛍️  Shopify Store Connection", colors.bright + colors.cyan);
+  log("─".repeat(60), colors.bright);
+  log("Now let's connect to your Shopify store and select a base theme.\n", colors.yellow);
+
+  log("Authenticating with Shopify CLI and fetching available themes...", colors.cyan);
   const themes = await getShopifyThemes();
 
   let shopifyEnvironment = "development";
   let themeId: string | null = null;
 
   if (themes.length > 0) {
-    log("\nAvailable themes:", colors.green);
+    log("\n✓ Successfully fetched themes from your store!\n", colors.green);
     const themeOptions = themes.map(t => `${t.name} (${t.role}) - ID: ${t.id}`);
     themeOptions.push("Skip - I'll configure this later");
 
     const themeChoice = await select(
-      "\nWhich theme would you like to use as a base?",
+      "Which theme would you like to use as a base?",
       themeOptions
     );
 
     if (themeChoice < themes.length) {
       themeId = themes[themeChoice].id;
-      const envName = await prompt("\nWhat would you like to name this environment? (e.g., 'development', 'staging'):");
-      shopifyEnvironment = envName || "development";
+      log("\n✓ Selected theme: " + themes[themeChoice].name, colors.green);
+
+      const envName = await prompt("\nWhat would you like to name this environment? (e.g., 'development', 'staging', 'production'):");
+      shopifyEnvironment = envName.trim() || "development";
+      log(`✓ Environment will be named: ${shopifyEnvironment}`, colors.green);
+    } else {
+      log("\n⏭️  Skipping theme selection. You can pull a theme later using 'shopify theme pull'", colors.yellow);
     }
   } else {
-    log("\nNo themes found or Shopify CLI not authenticated.", colors.yellow);
-    log("You can pull a theme later using 'shopify theme pull'", colors.yellow);
+    log("\n⚠️  No themes found or Shopify CLI not authenticated.", colors.yellow);
+    log("Make sure you've run 'shopify auth login' before running this setup.", colors.yellow);
+    log("You can pull a theme later using 'shopify theme pull'\n", colors.yellow);
   }
+
+  // Question 7: Project Context for CLAUDE.md
+  log("\n" + "─".repeat(60), colors.bright);
+  log("🤖 AI Assistant Configuration", colors.bright + colors.cyan);
+  log("─".repeat(60), colors.bright);
+  log("Help AI assistants (like Claude) understand your project better by providing context.\n", colors.yellow);
+
+  const projectType = await select(
+    "What type of Shopify store is this?",
+    [
+      "E-commerce (Standard online store)",
+      "Headless (API-driven, custom frontend)",
+      "B2B (Wholesale, bulk ordering)",
+      "Subscription (Recurring products)",
+      "Other/Custom"
+    ]
+  );
+
+  const projectTypeMap = ["e-commerce", "headless", "b2b", "subscription", "custom"];
+  const selectedProjectType = projectTypeMap[projectType];
+
+  const projectDescription = await prompt("\n📝 Brief description of this project (optional, press Enter to skip):");
 
   return {
     projectName,
@@ -171,6 +256,9 @@ async function askQuestions(): Promise<SetupConfig> {
     packageManager,
     shopifyEnvironment,
     themeId,
+    enableTunnel,
+    projectType: selectedProjectType,
+    projectDescription: projectDescription.trim() || "",
   };
 }
 
@@ -214,7 +302,7 @@ async function installDependencies(config: SetupConfig) {
   header("Installing Dependencies");
 
   const baseDeps = [
-    "vite",
+    config.enableTunnel ? "vite@6.0.8" : "vite", // Lock Vite to 6.0.8 for tunnel support
     "vite-plugin-shopify",
     "postcss",
     "autoprefixer",
@@ -233,6 +321,9 @@ async function installDependencies(config: SetupConfig) {
   }
 
   log(`Installing dependencies with ${config.packageManager}...`, colors.cyan);
+  if (config.enableTunnel) {
+    log("  ⚡ Installing Vite 6.0.8 (required for tunnel compatibility)", colors.yellow);
+  }
 
   try {
     if (config.packageManager === "bun") {
@@ -297,7 +388,8 @@ export default defineConfig(() => ({
       themeRoot: './',
       sourceCodeDir: 'frontend',
       entrypointsDir: 'frontend/entrypoints',
-      additionalEntrypoints: [],
+      additionalEntrypoints: [],${config.enableTunnel ? `
+      tunnel: true, // Enable Cloudflare tunnel for theme editor development` : ""}
     }),
   ],
   resolve: {
@@ -316,7 +408,8 @@ export default defineConfig(() => ({
       }
     }
   },
-  server: {
+  server: {${config.enableTunnel ? `
+    allowedHosts: 'all', // Required for Cloudflare tunnel` : ""}
     headers: {
       "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0",
       "Access-Control-Allow-Origin": "*",
@@ -352,6 +445,11 @@ export default defineConfig(() => ({
 
   await writeFile("vite.config.js", viteConfig);
   log("✓ vite.config.js created", colors.green);
+
+  // Lock Vite to 6.0.8 if tunnel is enabled
+  if (config.enableTunnel) {
+    log("✓ Vite version will be locked to 6.0.8 for tunnel compatibility", colors.green);
+  }
 }
 
 async function createPostCSSConfig(config: SetupConfig) {
@@ -629,21 +727,86 @@ export default window.${config.projectName.replace(/-/g, "")};
   await writeFile("frontend/entrypoints/storefront.js", storefrontJs);
   log("✓ storefront.js created", colors.green);
 
-  // Create custom_styling.css
-  const customCss = `/**
- * Custom Styling Entrypoint
+  // Create custom_styling.css or .scss
+  const fileExtension = config.stylingApproach === "scss" ? "scss" : "css";
+  const fileName = `frontend/entrypoints/custom_styling.${fileExtension}`;
+
+  let customStyles = "";
+
+  if (config.stylingApproach === "scss") {
+    // SCSS with tokens
+    customStyles = `/**
+ * Custom Styling Entrypoint (SCSS)
  */
 
+// Design Tokens
+$colors: (
+  'primary': rgb(var(--color-button)),
+  'secondary': rgb(var(--color-accent)),
+  'text-primary': #1a1a1a,
+  'text-secondary': #666,
+  'surface': #ffffff,
+  'border': #e5e5e5,
+);
+
+$spacing: (
+  'xs': 0.25rem,
+  'sm': 0.5rem,
+  'base': 1rem,
+  'lg': 2rem,
+  'xl': 4rem,
+);
+
+$breakpoints: (
+  'sm': 640px,
+  'md': 768px,
+  'lg': 1024px,
+  'xl': 1280px,
+  '2xl': 1536px,
+);
+
+$transitions: (
+  'fast': 150ms ease,
+  'base': 250ms ease,
+  'slow': 400ms ease,
+);
+
+// Centralized Media Query Mixins
+@mixin respond-to($breakpoint) {
+  @if map-has-key($breakpoints, $breakpoint) {
+    @media (min-width: map-get($breakpoints, $breakpoint)) {
+      @content;
+    }
+  } @else {
+    @warn "Breakpoint #{$breakpoint} not found in $breakpoints map.";
+  }
+}
+
+// Helper functions
+@function color($key) {
+  @return map-get($colors, $key);
+}
+
+@function spacing($key) {
+  @return map-get($spacing, $key);
+}
+
+@function transition($key) {
+  @return map-get($transitions, $key);
+}
+
+// CSS Custom Properties for runtime theming
 :root {
-  --color-primary: rgb(var(--color-button));
-  --color-secondary: rgb(var(--color-accent));
-  --spacing-base: 1rem;
-  --spacing-small: 0.5rem;
-  --spacing-large: 2rem;
-  --transition-base: 200ms ease;
+  --color-primary: #{color('primary')};
+  --color-secondary: #{color('secondary')};
+  --spacing-base: #{spacing('base')};
+  --spacing-small: #{spacing('sm')};
+  --spacing-large: #{spacing('lg')};
+  --transition-base: #{transition('base')};
   --border-radius: 4px;
 }
 
+// Utility Classes
 .visually-hidden {
   position: absolute !important;
   overflow: hidden;
@@ -655,10 +818,129 @@ export default window.${config.projectName.replace(/-/g, "")};
   clip: rect(0 0 0 0);
   word-wrap: normal !important;
 }
+
+// Import component styles
+// @import '../styles/product-card';
+// @import '../styles/cart-drawer';
+`;
+  } else {
+    // Plain CSS with centralized media queries via custom properties
+    customStyles = `/**
+ * Custom Styling Entrypoint
+ */
+
+/* Design Tokens - CSS Custom Properties */
+:root {
+  /* Colors */
+  --color-primary: rgb(var(--color-button));
+  --color-secondary: rgb(var(--color-accent));
+  --color-text-primary: #1a1a1a;
+  --color-text-secondary: #666;
+  --color-surface: #ffffff;
+  --color-border: #e5e5e5;
+
+  /* Spacing */
+  --spacing-xs: 0.25rem;
+  --spacing-sm: 0.5rem;
+  --spacing-base: 1rem;
+  --spacing-lg: 2rem;
+  --spacing-xl: 4rem;
+
+  /* Transitions */
+  --transition-fast: 150ms ease;
+  --transition-base: 250ms ease;
+  --transition-slow: 400ms ease;
+
+  /* Borders */
+  --border-radius: 4px;
+  --border-width: 1px;
+
+  /* Breakpoints (for use with min-width media queries) */
+  --breakpoint-sm: 640px;
+  --breakpoint-md: 768px;
+  --breakpoint-lg: 1024px;
+  --breakpoint-xl: 1280px;
+  --breakpoint-2xl: 1536px;
+}
+
+/* Utility Classes */
+.visually-hidden {
+  position: absolute !important;
+  overflow: hidden;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  border: 0;
+  clip: rect(0 0 0 0);
+  word-wrap: normal !important;
+}
+
+/*
+  Centralized Media Query Guide
+  ==============================
+  Always use mobile-first approach with min-width:
+
+  Mobile:   Base styles (no media query)
+  Tablet:   @media (min-width: 768px)  { }
+  Desktop:  @media (min-width: 1024px) { }
+  Wide:     @media (min-width: 1280px) { }
+
+  Example:
+  .my-component {
+    padding: var(--spacing-sm);        // Mobile
+
+    @media (min-width: 768px) {
+      padding: var(--spacing-base);    // Tablet+
+    }
+
+    @media (min-width: 1024px) {
+      padding: var(--spacing-lg);      // Desktop+
+    }
+  }
+*/
+
+/* Import component styles */
+/* @import './styles/product-card.css'; */
+/* @import './styles/cart-drawer.css'; */
+`;
+  }
+
+  await writeFile(fileName, customStyles);
+  log(`✓ custom_styling.${fileExtension} created`, colors.green);
+
+  if (config.stylingApproach === "scss") {
+    log("  ✓ SCSS tokens and mixins configured", colors.green);
+  } else {
+    log("  ✓ Centralized media query guide added", colors.green);
+  }
+}
+
+async function createExampleThemeToml(config: SetupConfig) {
+  header("Creating example.shopify.theme.toml");
+
+  const themeToml = `# Example Shopify Theme Configuration
+# Copy this file to shopify.theme.toml and update with your store details
+# shopify.theme.toml is gitignored to protect your credentials
+
+[environments.${config.shopifyEnvironment}]
+store = "your-store.myshopify.com"
+theme = "${config.themeId || "your-theme-id"}"
+ignore = [".shopifyignore"]
+
+# Additional environment examples:
+# [environments.staging]
+# store = "your-store-staging.myshopify.com"
+# theme = "staging-theme-id"
+
+# [environments.production]
+# store = "your-store.myshopify.com"
+# theme = "live-theme-id"
 `;
 
-  await writeFile("frontend/entrypoints/custom_styling.css", customCss);
-  log("✓ custom_styling.css created", colors.green);
+  await writeFile("example.shopify.theme.toml", themeToml);
+  log("✓ example.shopify.theme.toml created", colors.green);
+  log("  Copy this to shopify.theme.toml and update with your credentials", colors.yellow);
 }
 
 async function createCoreFiles() {
@@ -842,14 +1124,91 @@ async function runInitialBuild(config: SetupConfig) {
   }
 }
 
+async function updateClaudeMd(config: SetupConfig) {
+  header("Updating CLAUDE.md with Project Context");
+
+  // Read existing CLAUDE.md
+  const { readFile } = await import("node:fs/promises");
+  const existingContent = await readFile("CLAUDE.md", "utf-8");
+
+  // Create project-specific section
+  const projectContext = `
+
+---
+
+## Project-Specific Context
+
+**Project Name**: ${config.projectName}
+**Store Type**: ${config.projectType || "e-commerce"}
+**Description**: ${config.projectDescription || "Shopify theme development project"}
+
+### Configuration
+
+- **Styling Approach**: ${config.stylingApproach}
+- **JavaScript**: ${config.jsApproach === "vanilla" ? "Vanilla JavaScript" : "TypeScript"}
+- **Package Manager**: ${config.packageManager}
+- **Theme Editor Setup**: ${config.enableTunnel ? "Cloudflare tunnel enabled (Vite 6.0.8)" : "Manual HTTPS configuration required"}
+- **Environment**: ${config.shopifyEnvironment}
+
+### Project-Specific Notes
+
+${config.projectDescription ? `This project is ${config.projectDescription}.` : ""}
+
+${config.enableTunnel ? `
+**Important**: This project uses Cloudflare tunnel for theme editor development. Make sure cloudflared is installed:
+\`\`\`bash
+brew install cloudflared
+\`\`\`
+
+When running \`${config.packageManager} run dev\`, the tunnel will automatically create an HTTPS URL for testing in the Shopify theme editor.
+` : ""}
+
+${config.stylingApproach === "tailwind" ? `
+**Note**: This project uses Tailwind CSS. While the default guidelines emphasize semantic class names, you may use utility classes if that's the project's chosen approach. Ensure mobile-first responsive design principles are still followed.
+` : ""}
+
+### Quick Start Commands
+
+\`\`\`bash
+# Start development
+${config.packageManager} run dev
+
+# Build assets
+${config.packageManager} run build
+
+# Deploy to Shopify
+${config.packageManager} run deploy
+\`\`\`
+
+---
+
+*This project context section is auto-generated. Update it as the project evolves.*
+`;
+
+  // Append to existing content
+  const updatedContent = existingContent + projectContext;
+
+  await writeFile("CLAUDE.md", updatedContent);
+  log("✓ CLAUDE.md updated with project-specific context", colors.green);
+}
+
 async function displayNextSteps(config: SetupConfig) {
   header("Setup Complete!");
 
   log("Your Shopify theme development environment is ready!", colors.green);
   log("\nNext steps:\n", colors.bright);
 
+  if (config.enableTunnel) {
+    log("⚠️  IMPORTANT: Install cloudflared for tunnel support:", colors.yellow);
+    log("   brew install cloudflared\n", colors.yellow);
+  }
+
   log("1. Start the development server:", colors.cyan);
-  log(`   ${config.packageManager} run dev\n`, colors.yellow);
+  log(`   ${config.packageManager} run dev`, colors.yellow);
+  if (config.enableTunnel) {
+    log("   (This will create a Cloudflare tunnel for theme editor testing)", colors.bright);
+  }
+  console.log();
 
   log("2. Build for production:", colors.cyan);
   log(`   ${config.packageManager} run build\n`, colors.yellow);
@@ -858,8 +1217,13 @@ async function displayNextSteps(config: SetupConfig) {
   log(`   ${config.packageManager} run deploy\n`, colors.yellow);
 
   log("4. Read the documentation:", colors.cyan);
-  log("   - CLAUDE.md for project guidelines", colors.yellow);
-  log("   - project_setup.md for detailed setup info\n", colors.yellow);
+  log("   - CLAUDE.md for project guidelines and AI assistant rules", colors.yellow);
+  log("   - README.md for comprehensive documentation\n", colors.yellow);
+
+  log("5. Commit your changes:", colors.cyan);
+  log("   git add .", colors.yellow);
+  log(`   git commit -m "feat: Initial Shopify theme setup for ${config.projectName}"`, colors.yellow);
+  log("   git push\n", colors.yellow);
 
   log("Happy coding! 🚀", colors.green + colors.bright);
 }
@@ -900,8 +1264,10 @@ async function main() {
     await createGitHubWorkflow(config);
     await createEntrypoints(config);
     await createCoreFiles();
+    await createExampleThemeToml(config);
     await pullShopifyTheme(config);
     await runInitialBuild(config);
+    await updateClaudeMd(config);
     await initializeGit();
     await displayNextSteps(config);
 
