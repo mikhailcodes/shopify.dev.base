@@ -92,7 +92,21 @@ The setup script will ask the following questions:
 
 **Default:** Bun for superior performance.
 
-### 5. Shopify Environment & Theme
+### 5. Shopify Theme Configuration (TOML)
+**Question:** How would you like to configure Shopify store access?
+- **Option A:** Create shopify.theme.toml file (Recommended - stores environment configs)
+- **Option B:** Use Shopify CLI login only (No .toml file, authenticate via CLI each time)
+- **Option C:** Skip for now (Configure manually later)
+
+**Default:** Create shopify.theme.toml file.
+
+The `shopify.theme.toml` file stores your store URL and theme IDs for different environments. This file will be added to `.gitignore` at the **end of setup** to protect your credentials while still allowing you to commit it to private repositories if desired.
+
+If you choose the .toml approach, you'll be asked for your store URL (e.g., `your-store.myshopify.com`).
+
+If you choose CLI-only access, you'll need to run `shopify auth login` before each development session.
+
+### 6. Shopify Environment & Theme
 **Question:** Which Shopify theme would you like to use as a base?
 - The script will automatically fetch available themes from your Shopify store
 - You can select any theme (development, live, etc.)
@@ -621,7 +635,8 @@ Thumbs.db
 
 # Shopify theme files
 config/settings_data.json
-shopify.theme.toml
+# Note: shopify.theme.toml is added automatically at the END of setup
+# This allows you to review and commit it to private repos if desired before it's ignored
 
 # Build artifacts
 *.log
@@ -1086,12 +1101,47 @@ alias: {
 
 ---
 
+## AI Agent System
+
+This project includes specialized Claude subagents in `.claude/agents/` that assist with different aspects of development:
+
+### Available Agents
+
+| Agent | Purpose | When to Use |
+|-------|---------|-------------|
+| `ui-design` | UI/UX design & CSS/SCSS | Designing components, creating styles, responsive layouts, design tokens |
+| `tailwind` | Tailwind CSS specialist | Only when Tailwind is chosen; uses @apply, never inline utilities |
+| `code-writer` | JavaScript & Liquid implementation | Writing components, sections, features, common snippets |
+| `accessibility` | WCAG compliance & a11y | Interactive components, forms, modals, navigation |
+| `liquid` | Shopify Liquid templates | Section schemas, metafields, Ajax API, template optimization |
+| `performance` | Core Web Vitals & speed | LCP/CLS/INP optimization, lazy loading, image optimization |
+
+### Agent Guidelines
+
+- **UI Design Agent**: Creates mobile-first CSS/SCSS with semantic BEM naming. Generates design tokens from theme settings.
+- **Tailwind Agent**: Only active when Tailwind is configured. Uses `@apply` in CSS files, never inline utilities in HTML/Liquid.
+- **Code Writer Agent**: Enforces 500-line soft limit, uses `BaseComponent` pattern, implements section lifecycles, provides common snippet patterns.
+- **Accessibility Agent**: Reviews for WCAG 2.1 AA compliance, implements keyboard navigation and screen reader support.
+- **Liquid Agent**: Optimizes Liquid templates, handles metafields/metaobjects, implements Ajax API patterns.
+- **Performance Agent**: Optimizes Core Web Vitals, implements lazy loading, handles image optimization with Shopify CDN.
+
+### Agent Collaboration
+
+Agents can work together:
+1. **UI Design** designs component → **Code Writer** implements functionality
+2. **Code Writer** builds component → **Accessibility** reviews for a11y
+3. **UI Design** creates styles → **Tailwind** converts to @apply patterns (if Tailwind enabled)
+4. **Liquid** creates templates → **Performance** optimizes for Core Web Vitals
+5. **Performance** identifies issues → **Code Writer** implements lazy loading
+
+---
+
 ## Summary
 
 This setup provides:
 
 ✅ **Modern Build System** - Vite for fast development and optimized builds
-✅ **Fast Package Manager** - Bun for superior performance
+✅ **Flexible Package Manager** - Choose Bun, npm, pnpm, or yarn
 ✅ **Organized Structure** - Clear separation of source and build files
 ✅ **Hot Reload** - Instant feedback during development
 ✅ **CI/CD Pipeline** - Automated builds and checks via GitHub Actions
@@ -1099,6 +1149,10 @@ This setup provides:
 ✅ **Type Safety Option** - Easy to add TypeScript if needed
 ✅ **Best Practices** - Semantic CSS, camelCase JS, mobile-first design
 ✅ **Theme Editor Support** - Section lifecycle hooks for seamless customization
+✅ **Secure Configuration** - TOML file handling with gitignore protection
+✅ **Code Quality Tools** - ESLint + Prettier or Theme Check for linting
+✅ **Git Hooks** - Husky + lint-staged for pre-commit checks
+✅ **AI Agent System** - 6 specialized subagents for design, code, Liquid, performance, and accessibility
 
 **Next Steps:**
 

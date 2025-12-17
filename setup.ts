@@ -82,6 +82,10 @@ interface SetupConfig {
   enableTunnel?: boolean;
   projectType?: string;
   projectDescription?: string;
+  tomlApproach: "file" | "cli" | "skip";
+  storeUrl?: string;
+  lintingSetup: "eslint-prettier" | "theme-check" | "skip";
+  gitHooks: boolean;
 }
 
 async function getShopifyThemes(): Promise<Array<{ id: string; name: string; role: string }>> {
@@ -189,7 +193,84 @@ async function askQuestions(): Promise<SetupConfig> {
     log("Make sure to install cloudflared: brew install cloudflared\n", colors.yellow);
   }
 
-  // Question 6: Shopify Store Connection
+  // Question 6: Shopify Theme Configuration (TOML)
+  log("\n" + "─".repeat(60), colors.bright);
+  log("📄 Shopify Theme Configuration", colors.bright + colors.cyan);
+  log("─".repeat(60), colors.bright);
+  log("The shopify.theme.toml file stores your store URL and theme IDs for different environments.", colors.yellow);
+  log("This file will be added to .gitignore at the end of setup to protect your credentials.\n", colors.yellow);
+
+  const tomlChoice = await select(
+    "How would you like to configure Shopify store access?",
+    [
+      "Create shopify.theme.toml file (Recommended - stores environment configs)",
+      "Use Shopify CLI login only (No .toml file, authenticate via CLI each time)",
+      "Skip for now (Configure manually later)"
+    ]
+  );
+  const tomlMap: SetupConfig["tomlApproach"][] = ["file", "cli", "skip"];
+  const tomlApproach = tomlMap[tomlChoice];
+
+  let storeUrl = "";
+
+  if (tomlApproach === "file") {
+    storeUrl = await prompt("\n🏪 Enter your Shopify store URL (e.g., your-store.myshopify.com):");
+    if (storeUrl && !storeUrl.includes(".myshopify.com")) {
+      storeUrl = storeUrl.replace(/\.myshopify\.com$/, "") + ".myshopify.com";
+    }
+    log(`✓ Store URL: ${storeUrl || "(will be configured later)"}`, colors.green);
+  } else if (tomlApproach === "cli") {
+    log("\n✓ You'll use Shopify CLI authentication", colors.green);
+    log("  Run 'shopify auth login' to authenticate before development", colors.yellow);
+  } else {
+    log("\n⏭️  Skipping store configuration. You can set this up later.", colors.yellow);
+  }
+
+  // Question 7: Linting Setup
+  log("\n" + "─".repeat(60), colors.bright);
+  log("🔍 Code Quality Tools", colors.bright + colors.cyan);
+  log("─".repeat(60), colors.bright);
+  log("Linting helps catch errors and enforce consistent code style.\n", colors.yellow);
+
+  const lintChoice = await select(
+    "Which linting setup would you like?",
+    [
+      "ESLint + Prettier (Recommended - Full JavaScript/TypeScript linting + formatting)",
+      "Theme Check only (Shopify Liquid linting)",
+      "Skip for now (Configure manually later)"
+    ]
+  );
+  const lintMap: SetupConfig["lintingSetup"][] = ["eslint-prettier", "theme-check", "skip"];
+  const lintingSetup = lintMap[lintChoice];
+
+  if (lintingSetup === "eslint-prettier") {
+    log("\n✓ ESLint + Prettier will be configured", colors.green);
+    log("  Format on save and pre-commit checks included", colors.cyan);
+  } else if (lintingSetup === "theme-check") {
+    log("\n✓ Theme Check will be configured for Liquid linting", colors.green);
+  }
+
+  // Question 8: Git Hooks
+  log("\n" + "─".repeat(60), colors.bright);
+  log("🪝 Git Hooks", colors.bright + colors.cyan);
+  log("─".repeat(60), colors.bright);
+  log("Git hooks run checks before commits to catch issues early.\n", colors.yellow);
+
+  const hooksChoice = await select(
+    "Would you like to set up Git hooks (husky + lint-staged)?",
+    [
+      "Yes (Recommended - Run linting/formatting on staged files before commit)",
+      "No (Skip Git hooks setup)"
+    ]
+  );
+  const gitHooks = hooksChoice === 0;
+
+  if (gitHooks) {
+    log("\n✓ Husky + lint-staged will be configured", colors.green);
+    log("  Pre-commit hooks will format and lint staged files", colors.cyan);
+  }
+
+  // Question 9: Shopify Store Connection
   log("\n" + "─".repeat(60), colors.bright);
   log("🛍️  Shopify Store Connection", colors.bright + colors.cyan);
   log("─".repeat(60), colors.bright);
@@ -259,6 +340,10 @@ async function askQuestions(): Promise<SetupConfig> {
     enableTunnel,
     projectType: selectedProjectType,
     projectDescription: projectDescription.trim() || "",
+    tomlApproach,
+    storeUrl: storeUrl.trim() || "",
+    lintingSetup,
+    gitHooks,
   };
 }
 
@@ -522,7 +607,6 @@ Thumbs.db
 
 # Shopify theme files
 config/settings_data.json
-shopify.theme.toml
 
 # Build artifacts
 *.log
@@ -916,16 +1000,17 @@ $transitions: (
   }
 }
 
-async function createExampleThemeToml(config: SetupConfig) {
-  header("Creating example.shopify.theme.toml");
+async function createShopifyThemeToml(config: SetupConfig) {
+  if (config.tomlApproach === "skip" || config.tomlApproach === "cli") {
+    // Create only the example file for reference
+    header("Creating example.shopify.theme.toml");
 
-  const themeToml = `# Example Shopify Theme Configuration
+    const exampleToml = `# Example Shopify Theme Configuration
 # Copy this file to shopify.theme.toml and update with your store details
-# shopify.theme.toml is gitignored to protect your credentials
 
-[environments.${config.shopifyEnvironment}]
+[environments.development]
 store = "your-store.myshopify.com"
-theme = "${config.themeId || "your-theme-id"}"
+theme = "your-theme-id"
 ignore = [".shopifyignore"]
 
 # Additional environment examples:
@@ -938,9 +1023,333 @@ ignore = [".shopifyignore"]
 # theme = "live-theme-id"
 `;
 
-  await writeFile("example.shopify.theme.toml", themeToml);
-  log("✓ example.shopify.theme.toml created", colors.green);
-  log("  Copy this to shopify.theme.toml and update with your credentials", colors.yellow);
+    await writeFile("example.shopify.theme.toml", exampleToml);
+    log("✓ example.shopify.theme.toml created for reference", colors.green);
+
+    if (config.tomlApproach === "cli") {
+      log("  Using CLI authentication - run 'shopify auth login' before development", colors.yellow);
+    } else {
+      log("  Copy this to shopify.theme.toml when ready to configure", colors.yellow);
+    }
+    return;
+  }
+
+  // Create actual shopify.theme.toml file
+  header("Creating shopify.theme.toml");
+
+  const storeUrl = config.storeUrl || "your-store.myshopify.com";
+  const themeId = config.themeId || "your-theme-id";
+
+  const themeToml = `# Shopify Theme Configuration
+# This file contains your store credentials - it will be added to .gitignore
+
+[environments.${config.shopifyEnvironment}]
+store = "${storeUrl}"
+theme = "${themeId}"
+ignore = [".shopifyignore"]
+
+# Additional environment examples (uncomment and configure as needed):
+# [environments.staging]
+# store = "${storeUrl}"
+# theme = "staging-theme-id"
+# ignore = [".shopifyignore"]
+
+# [environments.production]
+# store = "${storeUrl}"
+# theme = "live-theme-id"
+# ignore = [".shopifyignore"]
+`;
+
+  await writeFile("shopify.theme.toml", themeToml);
+  log("✓ shopify.theme.toml created", colors.green);
+  log(`  Store: ${storeUrl}`, colors.cyan);
+  log(`  Theme: ${themeId}`, colors.cyan);
+  log(`  Environment: ${config.shopifyEnvironment}`, colors.cyan);
+}
+
+async function setupLinting(config: SetupConfig) {
+  if (config.lintingSetup === "skip") {
+    log("\nSkipping linting setup", colors.yellow);
+    return;
+  }
+
+  header("Setting Up Linting");
+
+  if (config.lintingSetup === "eslint-prettier") {
+    // Install ESLint and Prettier dependencies
+    const deps = [
+      "eslint",
+      "prettier",
+      "eslint-config-prettier",
+      "eslint-plugin-prettier",
+      "@eslint/js",
+    ];
+
+    if (config.jsApproach === "typescript") {
+      deps.push("@typescript-eslint/eslint-plugin", "@typescript-eslint/parser");
+    }
+
+    log("Installing ESLint and Prettier...", colors.cyan);
+
+    try {
+      if (config.packageManager === "bun") {
+        await $`bun add -d ${deps}`;
+      } else if (config.packageManager === "npm") {
+        await $`npm install --save-dev ${deps}`;
+      } else if (config.packageManager === "pnpm") {
+        await $`pnpm add -D ${deps}`;
+      } else {
+        await $`yarn add -D ${deps}`;
+      }
+      log("✓ Linting dependencies installed", colors.green);
+    } catch (error) {
+      log("✗ Error installing linting dependencies", colors.red);
+      console.error(error);
+      return;
+    }
+
+    // Create ESLint config
+    const eslintConfig = config.jsApproach === "typescript"
+      ? `import js from "@eslint/js";
+import tseslint from "@typescript-eslint/eslint-plugin";
+import tsparser from "@typescript-eslint/parser";
+import prettier from "eslint-plugin-prettier";
+
+export default [
+  js.configs.recommended,
+  {
+    files: ["frontend/**/*.{js,ts}"],
+    languageOptions: {
+      parser: tsparser,
+      ecmaVersion: 2022,
+      sourceType: "module",
+    },
+    plugins: {
+      "@typescript-eslint": tseslint,
+      prettier,
+    },
+    rules: {
+      "prettier/prettier": "error",
+      "no-unused-vars": "off",
+      "@typescript-eslint/no-unused-vars": ["error", { argsIgnorePattern: "^_" }],
+      "no-console": ["warn", { allow: ["warn", "error"] }],
+    },
+  },
+  {
+    ignores: ["assets/**", "node_modules/**", "*.config.js"],
+  },
+];
+`
+      : `import js from "@eslint/js";
+import prettier from "eslint-plugin-prettier";
+
+export default [
+  js.configs.recommended,
+  {
+    files: ["frontend/**/*.js"],
+    languageOptions: {
+      ecmaVersion: 2022,
+      sourceType: "module",
+    },
+    plugins: {
+      prettier,
+    },
+    rules: {
+      "prettier/prettier": "error",
+      "no-unused-vars": ["error", { argsIgnorePattern: "^_" }],
+      "no-console": ["warn", { allow: ["warn", "error"] }],
+    },
+  },
+  {
+    ignores: ["assets/**", "node_modules/**", "*.config.js"],
+  },
+];
+`;
+
+    await writeFile("eslint.config.js", eslintConfig);
+    log("✓ eslint.config.js created", colors.green);
+
+    // Create Prettier config
+    const prettierConfig = `{
+  "semi": true,
+  "singleQuote": true,
+  "tabWidth": 2,
+  "trailingComma": "es5",
+  "printWidth": 100,
+  "bracketSpacing": true,
+  "arrowParens": "always"
+}
+`;
+    await writeFile(".prettierrc", prettierConfig);
+    log("✓ .prettierrc created", colors.green);
+
+    // Create Prettier ignore
+    const prettierIgnore = `# Prettier ignore
+assets/
+node_modules/
+*.liquid
+*.json
+*.md
+bun.lockb
+`;
+    await writeFile(".prettierignore", prettierIgnore);
+    log("✓ .prettierignore created", colors.green);
+
+  } else if (config.lintingSetup === "theme-check") {
+    log("Theme Check is already included via @shopify/theme-check-node", colors.green);
+
+    // Create theme check config
+    const themeCheckConfig = `# Theme Check Configuration
+# https://shopify.dev/docs/themes/tools/theme-check
+
+root: .
+extends: :theme-app-extension
+
+# Ignore patterns
+ignore:
+  - node_modules/**
+  - frontend/**
+
+# Custom rules
+MatchingTranslations:
+  enabled: true
+
+RemoteAsset:
+  enabled: true
+  severity: suggestion
+`;
+    await writeFile(".theme-check.yml", themeCheckConfig);
+    log("✓ .theme-check.yml created", colors.green);
+  }
+}
+
+async function setupGitHooks(config: SetupConfig) {
+  if (!config.gitHooks) {
+    log("\nSkipping Git hooks setup", colors.yellow);
+    return;
+  }
+
+  header("Setting Up Git Hooks");
+
+  // Install husky and lint-staged
+  const deps = ["husky", "lint-staged"];
+
+  log("Installing husky and lint-staged...", colors.cyan);
+
+  try {
+    if (config.packageManager === "bun") {
+      await $`bun add -d ${deps}`;
+    } else if (config.packageManager === "npm") {
+      await $`npm install --save-dev ${deps}`;
+    } else if (config.packageManager === "pnpm") {
+      await $`pnpm add -D ${deps}`;
+    } else {
+      await $`yarn add -D ${deps}`;
+    }
+    log("✓ Git hooks dependencies installed", colors.green);
+  } catch (error) {
+    log("✗ Error installing Git hooks dependencies", colors.red);
+    console.error(error);
+    return;
+  }
+
+  // Initialize husky
+  try {
+    await $`npx husky init`;
+    log("✓ Husky initialized", colors.green);
+  } catch (error) {
+    log("⚠️ Husky init skipped (may need git init first)", colors.yellow);
+  }
+
+  // Create pre-commit hook
+  const preCommitHook = config.lintingSetup === "eslint-prettier"
+    ? `#!/usr/bin/env sh
+. "$(dirname -- "$0")/_/husky.sh"
+
+npx lint-staged
+`
+    : `#!/usr/bin/env sh
+. "$(dirname -- "$0")/_/husky.sh"
+
+# Run theme check on liquid files
+npx shopify theme check --fail-level error
+`;
+
+  try {
+    await mkdir(".husky", { recursive: true });
+    await writeFile(".husky/pre-commit", preCommitHook);
+    await $`chmod +x .husky/pre-commit`;
+    log("✓ Pre-commit hook created", colors.green);
+  } catch (error) {
+    log("⚠️ Pre-commit hook creation skipped", colors.yellow);
+  }
+
+  // Create lint-staged config
+  if (config.lintingSetup === "eslint-prettier") {
+    const lintStagedConfig = `{
+  "frontend/**/*.{js,ts}": [
+    "eslint --fix",
+    "prettier --write"
+  ],
+  "frontend/**/*.{css,scss}": [
+    "prettier --write"
+  ]
+}
+`;
+    await writeFile(".lintstagedrc", lintStagedConfig);
+    log("✓ .lintstagedrc created", colors.green);
+  }
+
+  // Add scripts to package.json
+  log("  Adding lint scripts to package.json...", colors.cyan);
+  try {
+    const { readFile } = await import("node:fs/promises");
+    const packageJsonContent = await readFile("package.json", "utf-8");
+    const packageJson = JSON.parse(packageJsonContent);
+
+    packageJson.scripts = packageJson.scripts || {};
+    packageJson.scripts.lint = config.lintingSetup === "eslint-prettier"
+      ? "eslint frontend/"
+      : "shopify theme check";
+    packageJson.scripts["lint:fix"] = config.lintingSetup === "eslint-prettier"
+      ? "eslint frontend/ --fix"
+      : "shopify theme check --auto-correct";
+    packageJson.scripts.format = "prettier --write frontend/";
+    packageJson.scripts.prepare = "husky";
+
+    await writeFile("package.json", JSON.stringify(packageJson, null, 2));
+    log("✓ Lint scripts added to package.json", colors.green);
+  } catch (error) {
+    log("⚠️ Could not update package.json scripts", colors.yellow);
+  }
+}
+
+async function addTomlToGitignore() {
+  header("Securing shopify.theme.toml");
+
+  const { readFile } = await import("node:fs/promises");
+
+  try {
+    let gitignoreContent = await readFile(".gitignore", "utf-8");
+
+    // Check if shopify.theme.toml is already in gitignore
+    if (!gitignoreContent.includes("shopify.theme.toml")) {
+      // Add it under the Shopify theme files section
+      gitignoreContent = gitignoreContent.replace(
+        "# Shopify theme files\nconfig/settings_data.json",
+        "# Shopify theme files\nconfig/settings_data.json\nshopify.theme.toml"
+      );
+
+      await writeFile(".gitignore", gitignoreContent);
+      log("✓ shopify.theme.toml added to .gitignore", colors.green);
+      log("  Your store credentials are now protected from being committed", colors.cyan);
+    } else {
+      log("✓ shopify.theme.toml already in .gitignore", colors.green);
+    }
+  } catch (error) {
+    log("✗ Error updating .gitignore", colors.red);
+    console.error(error);
+  }
 }
 
 async function createCoreFiles() {
@@ -1241,6 +1650,12 @@ async function main() {
     log(`Styling: ${config.stylingApproach}`, colors.cyan);
     log(`JavaScript: ${config.jsApproach}`, colors.cyan);
     log(`Package Manager: ${config.packageManager}`, colors.cyan);
+    log(`Store Config: ${config.tomlApproach === "file" ? "shopify.theme.toml" : config.tomlApproach === "cli" ? "CLI authentication" : "Manual setup"}`, colors.cyan);
+    if (config.storeUrl) {
+      log(`Store URL: ${config.storeUrl}`, colors.cyan);
+    }
+    log(`Linting: ${config.lintingSetup === "eslint-prettier" ? "ESLint + Prettier" : config.lintingSetup === "theme-check" ? "Theme Check" : "None"}`, colors.cyan);
+    log(`Git Hooks: ${config.gitHooks ? "Yes (husky + lint-staged)" : "No"}`, colors.cyan);
     log(`Environment: ${config.shopifyEnvironment}`, colors.cyan);
     if (config.themeId) {
       log(`Theme ID: ${config.themeId}`, colors.cyan);
@@ -1264,11 +1679,15 @@ async function main() {
     await createGitHubWorkflow(config);
     await createEntrypoints(config);
     await createCoreFiles();
-    await createExampleThemeToml(config);
+    await createShopifyThemeToml(config);
+    await setupLinting(config);
+    await setupGitHooks(config);
     await pullShopifyTheme(config);
     await runInitialBuild(config);
     await updateClaudeMd(config);
     await initializeGit();
+    // IMPORTANT: Add .toml to gitignore as the LAST step to protect credentials
+    await addTomlToGitignore();
     await displayNextSteps(config);
 
   } catch (error) {

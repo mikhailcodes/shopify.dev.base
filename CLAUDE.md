@@ -653,6 +653,117 @@ Before implementing features, consider asking:
 
 ---
 
+## Available Subagents
+
+This project includes specialized subagents in `.claude/agents/` that can be invoked for specific tasks. These agents are automatically available and can be called by name or delegated to based on task context.
+
+### UI Design Agent (`ui-design`)
+
+**When to use**: Designing UI components, creating CSS/SCSS styles, establishing design patterns, implementing responsive layouts.
+
+**Capabilities**:
+- Creates mobile-first responsive CSS/SCSS
+- Implements semantic BEM-style class naming
+- Designs component layouts and visual hierarchy
+- Establishes design tokens and CSS custom properties
+- Handles animations with reduced-motion support
+
+**Example invocation**: "Design the product card component styles" or "Create responsive layout for the hero section"
+
+### Tailwind Agent (`tailwind`)
+
+**When to use**: ONLY when Tailwind CSS is the chosen styling approach for the project.
+
+**Capabilities**:
+- Implements Tailwind using `@apply` directives in CSS files
+- **NEVER** uses inline utility classes in HTML/Liquid
+- Enforces mobile-first responsive patterns with `@screen`
+- Coordinates Tailwind config with Shopify theme settings
+
+**Important**: If Tailwind is not configured, this agent redirects to UI Design agent.
+
+**Example invocation**: "Convert this component to use Tailwind @apply patterns"
+
+### Code Writer Agent (`code-writer`)
+
+**When to use**: Writing JavaScript/TypeScript components, Liquid templates, implementing features.
+
+**Capabilities**:
+- Writes components extending `BaseComponent`
+- Implements section lifecycle hooks for theme editor
+- Creates Liquid sections and snippets
+- Enforces 500-line soft limit for files
+- Handles error handling and event cleanup
+
+**Guidelines enforced**:
+- Components MUST extend BaseComponent
+- Section components MUST use `useSectionLifecycle`
+- Files should stay under 500 lines (soft limit for Liquid)
+- Proper naming conventions (_prefix for function-scoped vars)
+
+**Example invocation**: "Implement the product quick view component" or "Create a featured collection section"
+
+### Accessibility Agent (`accessibility`)
+
+**When to use**: Implementing interactive components, forms, modals, navigation, or any UI requiring keyboard support and screen reader compatibility.
+
+**Capabilities**:
+- Reviews components for WCAG 2.1 AA compliance
+- Implements focus management and keyboard navigation
+- Adds proper ARIA attributes and roles
+- Creates skip links and landmark regions
+- Ensures color contrast compliance
+- Implements reduced-motion preferences
+
+**Example invocation**: "Review the cart drawer for accessibility" or "Add keyboard navigation to the product gallery"
+
+### Liquid Agent (`liquid`)
+
+**When to use**: Working with Shopify Liquid templates, section schemas, metafields, and Storefront API integration.
+
+**Capabilities**:
+- Liquid syntax and filter optimization
+- Section and block architecture
+- Schema configuration best practices
+- Metafield and metaobject patterns
+- Ajax API integration (Cart, Product Recommendations, Predictive Search)
+- Performance optimization (avoiding N+1 queries)
+
+**Example invocation**: "Create a featured collection section" or "Optimize the product template for performance"
+
+### Performance Agent (`performance`)
+
+**When to use**: Optimizing page speed, Core Web Vitals (LCP, CLS, INP), and overall performance for better conversion rates.
+
+**Capabilities**:
+- LCP/CLS/INP optimization strategies
+- Image optimization with Shopify CDN
+- Script loading strategies (defer, lazy load third-party)
+- Critical CSS extraction and async loading
+- Performance monitoring and Web Vitals reporting
+
+**Example invocation**: "Audit the homepage for performance issues" or "Optimize the hero section for LCP"
+
+### Agent Collaboration
+
+These agents can work together on complex tasks:
+
+1. **UI Design** → **Code Writer**: Design hands off specs for implementation
+2. **Code Writer** → **Accessibility**: Request a11y review for interactive components
+3. **UI Design** → **Tailwind**: Coordinate when Tailwind is enabled
+4. **Accessibility** → **UI Design**: Review color contrast and focus states
+5. **Liquid** → **Performance**: Optimize Liquid for fewer iterations
+6. **Performance** → **Code Writer**: Implement lazy loading patterns
+
+### Invoking Agents
+
+Agents can be invoked:
+- **Automatically**: Claude routes to appropriate agent based on task description
+- **Explicitly**: Name the agent in your request (e.g., "use the accessibility agent to review...")
+- **Via /agents command**: View and manage available agents
+
+---
+
 ## Additional Resources
 
 - [Vite Documentation](https://vitejs.dev/)

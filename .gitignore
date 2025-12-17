@@ -41,10 +41,6 @@ Thumbs.db
 
 # Shopify theme files
 config/settings_data.json
-shopify.theme.toml
-
-# Vite development files (auto-generated, contains localhost URLs during dev)
-snippets/vite-tag.liquid
 
 # Build artifacts
 *.log
